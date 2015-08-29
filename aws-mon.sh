@@ -58,6 +58,7 @@ usage()
     printf "    %-28s %s\n" "--cpu-id" "Reports cpu utilization (idle) in percentages."
     printf "    %-28s %s\n" "--cpu-wa" "Reports cpu utilization (wait) in percentages."
     printf "    %-28s %s\n" "--cpu-st" "Reports cpu utilization (steal) in percentages."
+    printf "    %-28s %s\n" "--cpu-util" "Reports cpu utilization (all) in percentages."
     printf "    %-28s %s\n" "--memory-units UNITS" "Specifies units in which to report memory usage. If not specified, memory is reported in megabytes. UNITS may be one of the following: bytes, kilobytes, megabytes, gigabytes."
     printf "    %-28s %s\n" "--mem-used-incl-cache-buff" "Count memory that is cached and in buffers as used."
     printf "    %-28s %s\n" "--mem-util" "Reports memory utilization in percentages."
@@ -72,6 +73,7 @@ usage()
     printf "    %-28s %s\n" "--disk-space-used" "Reports allocated disk space in gigabytes."
     printf "    %-28s %s\n" "--disk-space-avail" "Reports available disk space in gigabytes."
     printf "    %-28s %s\n" "--all-items" "Reports all items."
+    printf "    %-28s %s\n" "--use-instance-name" "Use Instace's Name tag for dimentions."
 }
 
 
@@ -98,6 +100,7 @@ CPU_SY=0
 CPU_ID=0
 CPU_WA=0
 CPU_ST=0
+CPU_UTIL=0
 MEM_UNITS="megabytes"
 MEM_UNIT_DIV=1
 MEM_USED_INCL_CACHE_BUFF=0
@@ -113,6 +116,7 @@ DISK_SPACE_UNIT_DIV=1
 DISK_SPACE_UTIL=0
 DISK_SPACE_USED=0
 DISK_SPACE_AVAIL=0
+USE_INSTANCE_NAME=0
 
 eval set -- "$ARGS"
 while true; do
@@ -174,6 +178,9 @@ while true; do
         --cpu-st)
             CPU_ST=1
             ;;
+        --cpu-util)
+            CPU_UTIL=1
+            ;;
         # Memory
         --memory-units)
             shift
@@ -217,6 +224,9 @@ while true; do
             ;;
         --disk-space-avail)
             DISK_SPACE_AVAIL=1
+            ;;
+        --use-instance-name)
+            USE_INSTANCE_NAME=1
             ;;
         --all-items)
             LOAD_AVE1=1
@@ -317,7 +327,18 @@ if [ $FROM_CRON -eq 1 ]; then
 fi
 
 # CloudWatch Command Line Interface Option
-CLOUDWATCH_OPTS="--namespace System/Detail/Linux --dimensions InstanceId=$instanceid"
+CLOUDWATCH_OPTS="--namespace System/Linux --dimensions"
+
+if [ $USE_INSTANCE_NAME -eq 1 ]; then
+    instacename=$(aws ec2 describe-instances --region $region \
+                  --instance-ids $instanceid \
+                  --query 'Reservations[].Instances[].Tags[?Key==`Name`].Value' \
+                  --output text)
+    CLOUDWATCH_OPTS="$CLOUDWATCH_OPTS InstanceName=$instacename"
+else
+    CLOUDWATCH_OPTS="$CLOUDWATCH_OPTS InstanceId=$instanceid"
+if
+
 if [ -n "$PROFILE" ]; then
     CLOUDWATCH_OPTS="$CLOUDWATCH_OPTS --profile $PROFILE"
 fi
@@ -436,6 +457,19 @@ if [ $CPU_ST -eq 1 ]; then
         fi
         if [ $VERIFY -eq 0 ]; then
             aws cloudwatch put-metric-data --metric-name "CpuSteal" --value "$cpu_st" --unit "Percent" $CLOUDWATCH_OPTS
+        fi
+    fi
+fi
+
+if [ $CPU_UTIL -eq 1 ]; then
+    cpu_id=`echo "$vmstat_output" | tail -1 | tr -s ' ' | cut -d ' ' -f 16`
+    cpu_util=`expr 100 - $cpu_id`
+    if [ -n "$cpu_util" ]; then
+        if [ $VERBOSE -eq 1 ]; then
+            echo "cpu_util:$cpu_util"
+        fi
+        if [ $VERIFY -eq 0 ]; then
+            aws cloudwatch put-metric-data --metric-name "CpuUtilization" --value "$cpu_util" --unit "Percent" $CLOUDWATCH_OPTS
         fi
     fi
 fi
