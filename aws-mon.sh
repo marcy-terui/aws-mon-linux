@@ -337,7 +337,7 @@ if [ $USE_INSTANCE_NAME -eq 1 ]; then
     CLOUDWATCH_OPTS="$CLOUDWATCH_OPTS InstanceName=$instacename"
 else
     CLOUDWATCH_OPTS="$CLOUDWATCH_OPTS InstanceId=$instanceid"
-if
+fi
 
 if [ -n "$PROFILE" ]; then
     CLOUDWATCH_OPTS="$CLOUDWATCH_OPTS --profile $PROFILE"
